@@ -2,17 +2,17 @@
   "$schema": "https://json.schemastore.org/claude-code-marketplace-manifest.json",
   "name": "humanizer",
   "owner": {
-    "name": "blader",
-    "url": "https://github.com/blader"
+    "name": "kjungmo",
+    "url": "https://github.com/kjungmo"
   },
-  "description": "The humanizer skill, installable as a Claude Code plugin.",
+  "description": "The Korean-first humanizer skill, installable as a Claude Code plugin.",
   "plugins": [
     {
       "name": "humanizer",
       "source": "./",
-      "description": "Remove signs of AI-generated writing from text, making it sound more natural and human. Based on Wikipedia's \"Signs of AI writing\" guide.",
+      "description": "한국어 우선 AI 글 흔적 제거 스킬. 채널별 어투 프리셋과 결정론 스캐너를 갖췄다. A Korean-first humanizer with channel presets and a deterministic scanner.",
       "license": "MIT",
-      "keywords": ["writing", "editing", "ai-detection", "humanize", "prose", "style"]
+      "keywords": ["writing", "editing", "ai-detection", "humanize", "korean", "prose", "style", "instagram", "blog"]
     }
   ]
 }

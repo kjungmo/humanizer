@@ -1,30 +1,91 @@
 # AGENTS.md
 
-Guidance for AI coding agents (Claude Code, Codex, Warp, etc.) working in this repository.
+이 저장소에서 작업하는 코딩 에이전트(Claude Code, Codex, Warp 등)를 위한 안내다.
 
-## What this repo is
+## 이 저장소가 무엇인가
 
-A portable agent skill implemented entirely as Markdown. The runtime artifact is `SKILL.md`: the agent reads its YAML frontmatter and editor prompt. There is no build step, and the repo should avoid wording that limits support to one or two harnesses.
+마크다운으로 된 이식 가능한 에이전트 스킬 하나와, 그 스킬이 감으로 세지 않게 해 주는
+의존성 없는 파이썬 스캐너다. 빌드 단계가 없다. 런타임 산출물은 `SKILL.md`와 `packs/`이고,
+스캐너는 보조 도구다. 특정 하네스에만 되는 표현을 문서에 쓰지 않는다.
 
-## Key files
+## 파일의 역할
 
-- `SKILL.md` — the skill itself. Portable YAML frontmatter (`name`, `description`, `license`, `metadata.version`) followed by the canonical, numbered pattern list with before/after examples. **This is the source of truth.**
-- `README.md` — for humans: installation, usage, a summary table of the patterns, and a version history.
-- `.claude-plugin/plugin.json` — optional Claude Code plugin manifest.
-- `.claude-plugin/marketplace.json` — optional single-repo marketplace entry so `/plugin marketplace add blader/humanizer` works.
-- `scripts/validate-package.py` — dependency-free package and synchronization checks used locally and in CI.
+- `SKILL.md`: 라우터다. 언어와 프리셋을 정하고, 4대 철칙과 작업 루프와 산출물 규격을 담는다.
+  **이식성 예산 500줄을 넘기지 않는다.** 패턴을 여기 늘리지 말고 팩으로 보낸다.
+- `packs/ko/core.md`: 한국어 흔적 카탈로그다. A~K 분류, 심각도, 처방, **완화 축**, 스캐너 대응.
+- `packs/ko/presets/*.md`: 채널별 윤문 지침이다. 다이얼, 완화, 강화, 가드, 예시.
+- `packs/en/core.md`: 영어 패턴 33개다. 상위 저장소에서 그대로 계승했다. **번호를 바꾸지 않는다.**
+- `humanizer/`: 스캐너다. `detect.py`(규칙), `metrics.py`(계량), `presets.py`(레지스트리), `cli.py`.
+- `eval/`: 회귀 픽스처와 채점기다.
+- `tests/`: 단위 테스트와 문서·코드 동기화 테스트다.
 
-## The maintenance contract
+## 유지보수 규약
 
-`SKILL.md` and `README.md` must stay in sync. When you change behavior or content:
+### 1. 규칙을 추가하거나 고칠 때
 
-- **Patterns:** the skill currently defines **33 numbered patterns**. If you add, remove, or renumber any, update the README pattern table, its "N Patterns Detected" heading, and every cross-reference in the same change. Keep numbering stable unless you are deliberately renumbering.
-- **Version:** `SKILL.md` frontmatter stores the version under `metadata.version`, `README.md` has a "Version History" section, and `.claude-plugin/plugin.json` has a `version` field. Bump them together so package metadata matches the skill. Keep the skill version under `metadata`; a top-level `version` key is not portable across Agent Skills hosts. (`marketplace.json` intentionally omits a version so `plugin.json` stays the package source of truth.)
-- **Compatibility:** keep install and usage language harness-neutral. The skill should work in any agent harness that can load Markdown skill instructions; Claude Code, OpenCode, Codex, and other harnesses are examples, not limits.
-- **Validation:** run `python3 scripts/validate-package.py`, `npx skills add . --list`, and `claude plugin validate .` before publishing.
-- **Non-obvious fixes:** if you change the prompt to handle a tricky failure mode (a repeated mis-edit, an unexpected tone shift), add a short note to the README version history explaining what was fixed and why.
+세 곳을 **한 커밋에서** 함께 고친다.
 
-## Editing SKILL.md
+1. `humanizer/detect.py`의 `RULES` (정규식 또는 `CUSTOM` 핸들러)
+2. `packs/ko/core.md`의 표 (ID, 심각도, 처방, 스캐너 열, 완화 열)
+3. `tests/test_detect.py`의 `POSITIVE` 예문
 
-- Preserve valid YAML frontmatter (formatting and indentation).
-- The prompt below the frontmatter is the product. Edit it like a careful instruction document, not code.
+`POSITIVE`에 예문이 없는 규칙이 있으면 `test_every_rule_has_a_positive_case`가 깨진다.
+표와 코드가 어긋나면 `test_scanner_ids_match_rule_table`이 깨진다. 일부러 그렇게 만들어 뒀다.
+
+임계값을 낮추기 전에 오탐을 생각한다. **과윤문이 이 스킬의 가장 흔한 실패다.** 규칙을
+느슨하게 만들어 흔적을 더 잡는 것보다, 멀쩡한 사람 글을 건드리지 않는 쪽이 중요하다.
+오탐 방어를 위해 예외 목록(`_CONJUNCTION_WORDS`, `_NOUN_GO`)을 늘렸다면 그 이유를 주석에 남긴다.
+
+### 2. 프리셋을 추가하거나 완화 집합을 바꿀 때
+
+`humanizer/presets.py`의 relax 집합과 `packs/ko/core.md`의 완화 열은 **같은 사실의 두 표현**이다.
+어긋나면 프롬프트와 스캐너가 서로 다른 말을 하기 시작하고, 사람 눈으로는 못 잡는다.
+`tests/test_presets.py::TestDocSync`가 이걸 지킨다.
+
+- 완화 열 약칭: `nb` `db` `ig` `rl` `cm`. 완화 없음은 `-` 또는 `없음`.
+- `NEVER_RELAXED`(줄표 J-2, 챗봇 잔재 K-1, hype 어휘 D-4)는 어떤 선언보다 우선한다.
+  이 셋을 완화하고 싶으면 먼저 그게 왜 채널의 정상 표현인지 설명할 수 있어야 한다.
+- 새 프리셋에는 `packs/ko/presets/<id>.md`를 만들고 `Preset.pack`에 경로를 적는다.
+  팩이 없으면 `pack=None`으로 두고, README의 "프롬프트 팩 준비 중" 안내를 갱신한다.
+- 리스타일 계열(어투를 바꾸는 프리셋)은 `guard="fact-ledger"`로 둔다. 변경률 가드는
+  재작성에서 의미를 잃는다.
+
+### 3. 버전
+
+네 곳에서 같아야 한다. `scripts/validate-package.py`가 확인한다.
+
+- `SKILL.md` 프런트매터의 `metadata.version`
+- `README.md`의 Version History 첫 항목
+- `.claude-plugin/plugin.json`의 `version`
+- `humanizer/__init__.py`의 `__version__`
+
+버전은 `metadata` 아래에 둔다. 최상위 `version` 키는 Agent Skills 호스트 사이에서 이식되지 않는다.
+`marketplace.json`은 의도적으로 버전을 두지 않는다. `plugin.json`이 패키지의 기준이다.
+
+### 4. 출처
+
+`THIRD-PARTY-NOTICES.md`는 계보 문서다. 선행 작업에서 뭔가를 더 가져오면 거기에 적는다.
+"이 저장소가 새로 쓴 것" 절도 함께 갱신한다. 물려받은 것과 새로 쓴 것의 경계가 흐려지면
+이 저장소의 정체가 흐려진다.
+
+## 커밋 전에 돌린다
+
+```bash
+python3 -m unittest discover -s tests -t .
+python3 eval/score.py
+python3 scripts/validate-package.py
+python3 -m humanizer detect SKILL.md --preset general    # 자기 문서 점검
+```
+
+마지막 줄은 자기 검증이다. 이 스킬이 금지하는 표현을 이 스킬의 문서가 쓰고 있으면
+설득력이 없다. **작성한 한국어 문서에 줄표(`—`, `–`)를 쓰지 않는다.**
+`packs/` 아래는 예외다. 패턴 카탈로그와 프리셋 예시는 자기가 설명하는 흔적을 예문으로 담아야 한다.
+그래서 자기 점검은 라우터(`SKILL.md`)만 대상으로 한다.
+
+배포 전에는 `npx skills add . --list`와 `claude plugin validate .`도 돌린다.
+
+## 문서를 쓸 때
+
+- 한국어 문서는 존댓말이 아닌 평서체로 쓰되, 직역체를 피한다. 영어 형용사와 한글을 섞지 않는다.
+- 프롬프트(`SKILL.md`, `packs/`)는 코드가 아니라 지시문이다. 사람이 읽는 편집 지침처럼 고친다.
+- 표를 고칠 때 열 개수를 유지한다. `tests/test_presets.py`의 파서가 6열 표를 읽는다.

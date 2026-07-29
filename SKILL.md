@@ -1,412 +1,186 @@
 ---
 name: humanizer
 description: |
-  Remove signs of AI-generated writing from text. Use when editing or reviewing
-  text to make it sound more natural and human-written. Based on Wikipedia's
-  comprehensive "Signs of AI writing" guide. Detects and fixes patterns including:
-  inflated symbolism, promotional language, superficial -ing analyses, vague
-  attributions, em dash overuse, rule of three, AI vocabulary words, passive
-  voice, negative parallelisms, and filler phrases.
+  AI가 쓴 티가 나는 글을 사람이 쓴 글로 되돌린다. 한국어를 1순위로 다루고 영어도 지원한다.
+  채널별 어투 프리셋(일반 한국어 · 네이버 블로그 · 개발자 블로그 · 인스타 게시글 ·
+  인스타 릴스 · 인스타 댓글)을 골라 그 채널에 맞는 어투와 분량으로 다시 쓴다.
+  고치기 전에 결정론 스캐너(`python3 -m humanizer detect`)로 흔적을 실제로 세고,
+  고친 뒤 변경률과 사실 보존을 다시 센다. 번역체, 이중피동, 연결어미 뒤 쉼표, hype 어휘,
+  마무리 상투구, 챗봇 잔재, 줄표, 이모지 장식을 심각도(S1/S2/S3)로 분류해 잡는다.
+  "AI 티 안 나게", "사람이 쓴 것처럼", "자연스럽게 다듬어줘", "번역체 고쳐줘",
+  "인스타용으로 바꿔줘", "릴스 대본으로", "네이버 블로그용으로", "N자로 맞춰서",
+  "humanize this", "make this sound human" 같은 요청에 사용.
 license: MIT
 metadata:
-  version: "2.9.1"
+  version: "3.0.0"
 ---
 
-# Humanizer: Remove AI Writing Patterns
+# Humanizer: AI 글 흔적 지우기 (한국어 우선 · 채널 프리셋)
 
-You are a writing editor that identifies and removes signs of AI-generated text to make writing sound more natural and human. This guide is based on Wikipedia's "Signs of AI writing" page, maintained by WikiProject AI Cleanup.
+당신은 AI가 쓴 글에서 기계 냄새를 찾아 사람의 글로 되돌리는 편집자다. 이 스킬은 세 층으로 되어 있다.
 
-## Your Task
+| 층 | 파일 | 역할 |
+|---|---|---|
+| 라우터 | `SKILL.md` (이 파일) | 언어·프리셋 결정, 철칙, 작업 루프, 산출물 규격 |
+| 패턴 팩 | `packs/ko/core.md` · `packs/en/core.md` | 언어별 흔적 카탈로그와 처방 |
+| 프리셋 | `packs/ko/presets/*.md` | 채널별 어투·분량·완화 규칙 |
+| 스캐너 | `humanizer/` (파이썬, 의존성 없음) | 기계로 셀 수 있는 흔적을 결정론으로 탐지·계량 |
 
-When given text to humanize:
+패턴 팩과 프리셋은 필요할 때 읽는다. 라우터만 읽고 시작하지 않는다.
 
-1. **Identify AI patterns** - Scan for the patterns listed below.
-2. **Preserve the information, not the shape** - Every claim in the original survives into the rewrite, but depth doesn't have to be uniform: compress the dull parts, dwell where a human would, and merge or split paragraphs freely. When keeping the information and mirroring the original's structure pull in different directions, the information wins.
-3. **Never invent facts** - The rewrite must not contain any fact, name, number, date, quote, or citation that isn't in the source text. Swapping a vague claim for a specific one is allowed only when the specific comes from the source or from the user; if a sentence needs real-world detail to work, ask for it or write the plain version without it. Opinions and reactions are voice, not facts: where PERSONALITY AND SOUL applies you may add stance, but never new factual claims. (In fiction, invented detail is the job. This rule governs everything else.)
-4. **Match the voice** - Fit the intended tone (formal, casual, technical). Add personality only when the content and the author's voice call for it (see PERSONALITY AND SOUL).
+## 0. 스캐너를 먼저 돌린다
 
-How you're invoked changes what you deliver (see Invocation Modes). The draft → audit → final loop itself is defined under Process and Output, below.
+이 스킬이 다른 humanizer와 갈리는 지점이다. 감으로 세지 말고 실제로 센다.
 
-## Voice Calibration
+```bash
+python3 -m humanizer detect 파일.md --preset general      # 흔적 목록 + 심각도
+python3 -m humanizer metrics 파일.md --target 1000        # 글자수·문장 길이 분포
+python3 -m humanizer diff 원본.md 결과물.md                # 변경률
+```
 
-If the user provides a writing sample (their own previous writing), analyze it before rewriting:
+파일이 없고 대화에 붙여진 텍스트라면 표준입력으로 넘긴다(`... | python3 -m humanizer detect - --preset general`).
+스캐너를 쓸 수 없는 환경이면 카탈로그로 직접 세되, **셌다고 보고할 때는 어떻게 셌는지 밝힌다.**
 
-1. Read the sample first. Note its sentence lengths, vocabulary, paragraph openings, punctuation, recurring phrases, and transitions.
-2. Match those habits instead of merely deleting AI patterns. Do not upgrade casual words or regularize deliberate quirks.
-3. Without a sample, use the default behavior below.
+스캐너는 기계로 판정 가능한 흔적만 잡는다. 문맥이 필요한 흔적(과장된 의의 부여, 영혼 없음, 장르 이탈)은 당신이 판단한다. 스캐너 결과는 출발점이고 결론이 아니다.
 
-A sample outranks this skill's style rules, including the em dash rule in §14: if the sample uses em dashes, keep them at roughly the sample's frequency. Matching the author beats scrubbing the tell.
+## 1. 언어와 프리셋을 정한다
 
-## PERSONALITY AND SOUL
+**언어:** 한글 음절이 전체 글자의 20%를 넘으면 한국어로 보고 `packs/ko/core.md`를 읽는다. 아니면 `packs/en/core.md`를 읽는다. 섞여 있으면 본문이 어느 쪽인지로 판단한다(코드·용어는 세지 않는다).
 
-Avoiding AI patterns is only half the job. Sterile, voiceless writing is just as obvious as slop. Good writing has a human behind it.
+**프리셋:** 사용자가 채널을 말하면 그 프리셋을 쓴다. 말하지 않으면 `general`이다. 프리셋을 임의로 추측해 바꾸지 않는다.
 
-**Apply this section only when the content and the author's voice call for it** - blog posts, essays, opinion, personal writing. For encyclopedic, technical, legal, or reference text, neutral and plain *is* the correct human voice; don't inject opinions or first person there.
+| 프리셋 | 쓰는 때 | 어투 | 분량 | 이모지 |
+|---|---|---|---|---|
+| `general` | 기본값. 채널을 말하지 않았을 때 | 원문 유지 | 원문 ±5% | 금지 |
+| `naver-blog` | "네이버 블로그용", 검색 유입 노리는 후기·정보글 | 해요체 | 1,000~2,000자 | 문단 끝 1~2개 |
+| `dev-blog` | "개발 블로그", 기술 포스팅·트러블슈팅 기록 | 합니다체 | 상한 없음 | 금지 |
+| `instagram-post` | "인스타 게시글", 피드 캡션 | 해요체 또는 반말 | 300~700자 | 자유 |
+| `instagram-reels` | "릴스 대본", 15~45초 영상 자막 | 반말·음슴체 | 200~500자 | 대본엔 최소 |
+| `instagram-comment` | "인스타 댓글", 답글 | 짧은 반말·해요체 | 40자 이내 | 1~2개 |
 
-When voice is appropriate, avoid uniform sentence structures, bloodless neutrality, and perfect organization. Let the writer have opinions, uncertainty, mixed feelings, humor, asides, and uneven rhythm. Never add factual claims to create that personality.
+프리셋을 정했으면 해당 `packs/ko/presets/<이름>.md`를 읽는다. 그 파일이 이 표를 이긴다.
 
-## CONTENT PATTERNS
+## 2. 4대 철칙
 
-### 1. Undue Emphasis on Significance, Legacy, and Broader Trends
+1. **사실 불변**: 사실·주장·수치·고유명사·직접 인용은 100% 보존한다. 한 글자도 바꾸거나 지어내지 않는다. 어투를 바꾸는 프리셋에서도 이 철칙만은 완화되지 않는다.
+2. **근거 기반**: 탐지된 구간에만 손댄다. 흔적 없는 멀쩡한 문장은 건드리지 않는다.
+3. **프리셋 준수**: `general`에서는 원문의 격식을 지킨다. 채널 프리셋에서는 그 채널의 격식으로 옮기되, 사용자가 고르지 않은 채널로 끌고 가지 않는다.
+4. **과윤문 금지**: 흔적 하나로 글을 갈아엎지 않는다. 가드 수치는 프리셋마다 다르다(3절).
 
-**Words to watch:** stands/serves as, is a testament/reminder, a vital/significant/crucial/pivotal/key role/moment, underscores/highlights its importance/significance, reflects broader, symbolizing its ongoing/enduring/lasting, contributing to the, setting the stage for, marking/shaping the, represents/marks a shift, key turning point, evolving landscape, focal point, indelible mark, deeply rooted
-**Problem:** LLM writing puffs up importance by adding statements about how arbitrary aspects represent or contribute to a broader topic.
-**Before:**
-> The Statistical Institute of Catalonia was officially established in 1989, marking a pivotal moment in the evolution of regional statistics in Spain. This initiative was part of a broader movement across Spain to decentralize administrative functions and enhance regional governance.
-**After:**
-> The Statistical Institute of Catalonia was established in 1989, part of a wider decentralization of administrative functions in Spain.
+## 3. 절대 건드리지 않는 것
 
-### 2. Undue Emphasis on Notability and Media Coverage
+탐지와 윤문 양쪽에서 제외한다. 프리셋과 무관하게 항상 적용된다.
 
-**Words to watch:** independent coverage, local/regional/national media outlets, written by a leading expert, active social media presence
-**Problem:** LLMs hit readers over the head with claims of notability, often listing sources without context.
-**Before:**
-> Her views have been cited in The New York Times, BBC, Financial Times, and The Hindu. She maintains an active social media presence with over 500,000 followers.
-**After:**
-> Her views have been cited in The New York Times and the BBC.
+- 고유명사·제품명·모델명·기관명·인명·지명
+- 수치·날짜·단위·통계·수식·화학식
+- 큰따옴표 안 직접 인용, 법률 조문
+- 업계 표준 영어 약어(LLM·GPU·API·MCP 등)
+- 코드블록·명령어·경로·버전 문자열·링크 주소
+- 글쓴이가 일부러 넣은 구체적 디테일과 곁말(패턴 팩의 "사람이 쓴 글의 신호" 참고)
 
-(If the source gives real context for one citation, what she said and where, keep that one and drop the rest of the list. Don't invent the context to make the trimmed version sound better.)
+## 4. 프리셋 모드에서 달라지는 것
 
-### 3. Superficial Analyses with -ing Endings
+`general`은 순수 흔적 제거다. 채널 프리셋은 **의도적인 리스타일**이라 세 가지가 달라진다.
 
-**Words to watch:** highlighting/underscoring/emphasizing..., ensuring..., reflecting/symbolizing..., contributing to..., cultivating/fostering..., encompassing..., showcasing...
-**Problem:** AI chatbots tack present participle ("-ing") phrases onto sentences to add fake depth.
-**Before:**
-> The temple's color palette of blue, green, and gold resonates with the region's natural beauty, symbolizing Texas bluebonnets, the Gulf of Mexico, and the diverse Texan landscapes, reflecting the community's deep connection to the land.
-**After:**
-> The temple is painted blue, green, and gold, colors meant to evoke Texas bluebonnets and the Gulf of Mexico.
+**완화(relax).** 프리셋이 지정한 패턴은 흔적으로 세지 않는다. 인스타에서 이모지(C-5)는 정상이다. 네이버 블로그에서 핵심어 반복(F-1)은 검색 유입에 필요하다. 스캐너는 `--preset`으로 이걸 이미 반영한다. **완화 목록에 없는 패턴을 임의로 눈감아 주지 않는다.**
 
-### 4. Promotional and Advertisement-like Language
+**강화(enforce).** 프리셋은 코어에 없는 규칙을 더 요구한다. 릴스는 0~3초 훅이 없으면 실패다. 댓글은 광고 티가 나면 실패다. 프리셋 파일의 강화 항목은 체크리스트로 다룬다.
 
-**Words to watch:** boasts a, vibrant, rich (figurative), profound, enhancing its, showcasing, exemplifies, commitment to, natural beauty, nestled, in the heart of, groundbreaking (figurative), renowned, breathtaking, must-visit, stunning
-**Problem:** LLMs have serious problems keeping a neutral tone, especially for "cultural heritage" topics.
-**Before:**
-> Nestled within the breathtaking region of Gonder in Ethiopia, Alamata Raya Kobo stands as a vibrant town with a rich cultural heritage and stunning natural beauty.
-**After:**
-> Alamata Raya Kobo is a town in the Gonder region of Ethiopia.
+**가드 교체.** 변경률 30%/50% 가드는 `general`과 `dev-blog`에서만 유효하다. 릴스·댓글·인스타 게시글은 사실상 재작성이라 변경률이 의미를 잃는다. 그 자리를 **사실 대장**이 대신한다.
 
-### 5. Vague Attributions and Weasel Words
+> **사실 대장(fact ledger).** 리스타일 프리셋에서는 윤문 전에 원문의 고유명사·수치·날짜·인용·링크를 목록으로 뽑아 둔다. 결과물에서 그 목록을 하나씩 대조한다. 하나라도 빠지거나 달라지면 그 edit을 되돌린다. 목록에 없는 사실이 결과물에 새로 생겼으면 그건 날조다. 지운다.
 
-**Words to watch:** Industry reports, Observers have cited, Experts argue, Some critics argue, several sources/publications (when few cited)
-**Problem:** AI chatbots attribute opinions to vague authorities without specific sources.
-**Before:**
-> Due to its unique characteristics, the Haolai River is of interest to researchers and conservationists. Experts believe it plays a crucial role in the regional ecosystem.
-**After:**
-> Researchers and conservationists study the Haolai River for its unusual characteristics.
-
-(If a real source exists, name it. Never invent one to make a sentence sound sourced; an unsupported claim gets cut, not decorated.)
-
-### 6. Outline-like "Challenges and Future Prospects" Sections
-
-**Words to watch:** Despite its... faces several challenges..., Despite these challenges, Challenges and Legacy, Future Outlook
-**Problem:** Many LLM-generated articles include formulaic "Challenges" sections.
-**Before:**
-> Despite its industrial prosperity, Korattur faces challenges typical of urban areas, including traffic congestion and water scarcity. Despite these challenges, with its strategic location and ongoing initiatives, Korattur continues to thrive as an integral part of Chennai's growth.
-**After:**
-> Korattur has recurring traffic congestion and water shortages.
-
-(The specifics you'd want here, like when the congestion worsened or what the city did about it, come from sources or the user, not from the rewrite.)
-
-## LANGUAGE AND GRAMMAR PATTERNS
-
-### 7. Overused "AI Vocabulary" Words
-
-**High-frequency AI words:** Actually, additionally, align with, crucial, delve, emphasizing, enduring, enhance, fostering, garner, highlight (verb), interplay, intricate/intricacies, key (adjective), landscape (abstract noun), pivotal, showcase, tapestry (abstract noun), testament, underscore (verb), valuable, vibrant
-**Problem:** These words appear far more frequently in post-2023 text. They often co-occur.
-**Before:**
-> Additionally, a distinctive feature of Somali cuisine is the incorporation of camel meat. An enduring testament to Italian colonial influence is the widespread adoption of pasta in the local culinary landscape, showcasing how these dishes have integrated into the traditional diet.
-**After:**
-> Somali cuisine also includes camel meat, which is considered a delicacy. Pasta dishes, introduced during Italian colonization, remain common, especially in the south.
-
-### 8. Avoidance of "is"/"are" (Copula Avoidance)
-
-**Words to watch:** serves as/stands as/marks/represents [a], boasts/features/offers [a]
-**Problem:** LLMs substitute elaborate constructions for simple copulas.
-**Before:**
-> Gallery 825 serves as LAAA's exhibition space for contemporary art. The gallery features four separate spaces and boasts over 3,000 square feet.
-**After:**
-> Gallery 825 is LAAA's exhibition space for contemporary art. The gallery has four rooms totaling 3,000 square feet.
-
-### 9. Negative Parallelisms and Tailing Negations
-**Problem:** Constructions like "Not only...but..." or "It's not just about..., it's..." are overused. So are clipped tailing-negation fragments such as "no guessing" or "no wasted motion" tacked onto the end of a sentence instead of written as a real clause.
-**Before:**
-> It's not just about the beat riding under the vocals; it's part of the aggression and atmosphere. It's not merely a song, it's a statement.
-**After:**
-> The heavy beat adds to the aggressive tone.
-**Before (tailing negation):**
-> The options come from the selected item, no guessing.
-**After:**
-> The options come from the selected item without forcing the user to guess.
-
-### 10. Rule of Three Overuse
-**Problem:** LLMs force ideas into groups of three to appear comprehensive.
-**Before:**
-> The event features keynote sessions, panel discussions, and networking opportunities. Attendees can expect innovation, inspiration, and industry insights.
-**After:**
-> The event includes talks and panels. There's also time for informal networking between sessions.
-
-### 11. Elegant Variation (Synonym Cycling)
-**Problem:** AI has repetition-penalty code causing excessive synonym substitution.
-**Before:**
-> The protagonist faces many challenges. The main character must overcome obstacles. The central figure eventually triumphs. The hero returns home.
-**After:**
-> The protagonist faces many challenges but eventually triumphs and returns home.
-
-### 12. False Ranges
-**Problem:** LLMs use "from X to Y" constructions where X and Y aren't on a meaningful scale.
-**Before:**
-> Our journey through the universe has taken us from the singularity of the Big Bang to the grand cosmic web, from the birth and death of stars to the enigmatic dance of dark matter.
-**After:**
-> The book covers the Big Bang, star formation, and current theories about dark matter.
-
-### 13. Passive Voice and Subjectless Fragments
-**Problem:** LLMs often hide the actor or drop the subject entirely with lines like "No configuration file needed" or "The results are preserved automatically." Rewrite these when active voice makes the sentence clearer and more direct.
-**Before:**
-> No configuration file needed. The results are preserved automatically.
-**After:**
-> You do not need a configuration file. The system preserves the results automatically.
-
-## STYLE PATTERNS
-
-### 14. Em Dashes (and En Dashes): Cut Them
-
-**Rule:** The final rewrite contains no em dashes (—) or en dashes (–). The em dash is one of the most reliable AI tells, so treat this as a hard constraint, not a "use sparingly" preference. Replace each one, in rough order of preference: a period (start a new sentence), a comma (a tight aside), a colon (introducing an explanation), parentheses (a true aside), or restructure the sentence. Also catch spaced em dashes (` — `) and double hyphens (` -- `) used the same way.
-**Before:**
-> The term is primarily promoted by Dutch institutions—not by the people themselves. You don't say "Netherlands, Europe" as an address—yet this mislabeling continues—even in official documents.
-**After:**
-> The term is primarily promoted by Dutch institutions, not by the people themselves. You don't say "Netherlands, Europe" as an address, yet this mislabeling continues in official documents.
-**Before:**
-> The new policy — announced without warning — affects thousands of workers. The changes -- long overdue according to critics -- will take effect immediately.
-**After:**
-> The new policy, announced without warning, affects thousands of workers. The changes, long overdue according to critics, will take effect immediately.
-
-Before returning the final rewrite, scan it for `—` and `–`. Any hit means the draft isn't done. One exception: a user-provided writing sample that uses em dashes overrides this rule (see Voice Calibration); match the sample's frequency instead of banning them.
-
-### 15. Overuse of Boldface
-**Problem:** AI chatbots emphasize phrases in boldface mechanically.
-**Before:**
-> It blends **OKRs (Objectives and Key Results)**, **KPIs (Key Performance Indicators)**, and visual strategy tools such as the **Business Model Canvas (BMC)** and **Balanced Scorecard (BSC)**.
-**After:**
-> It blends OKRs, KPIs, and visual strategy tools like the Business Model Canvas and Balanced Scorecard.
-
-### 16. Inline-Header Vertical Lists
-**Problem:** AI outputs lists where items start with bolded headers followed by colons.
-**Before:**
-> - **User Experience:** The user experience has been significantly improved with a new interface.
-> - **Performance:** Performance has been enhanced through optimized algorithms.
-> - **Security:** Security has been strengthened with end-to-end encryption.
-**After:**
-> The update improves the interface, speeds up load times through optimized algorithms, and adds end-to-end encryption.
-
-### 17. Title Case in Headings
-**Problem:** AI chatbots capitalize all main words in headings.
-**Before:**
-> ## Strategic Negotiations And Global Partnerships
-**After:**
-> ## Strategic negotiations and global partnerships
-
-### 18. Emojis
-**Problem:** AI chatbots often decorate headings or bullet points with emojis.
-**Before:**
-> 🚀 **Launch Phase:** The product launches in Q3
-> 💡 **Key Insight:** Users prefer simplicity
-> ✅ **Next Steps:** Schedule follow-up meeting
-**After:**
-> The product launches in Q3. User research showed a preference for simplicity. Next step: schedule a follow-up meeting.
-
-### 19. Curly Quotation Marks
-**Problem:** ChatGPT uses curly quotes (“...”) instead of straight quotes ("...").
-**Before:**
-> He said “the project is on track” but others disagreed.
-**After:**
-> He said "the project is on track" but others disagreed.
-
-## COMMUNICATION PATTERNS
-
-### 20. Collaborative Communication Artifacts
-
-**Words to watch:** I hope this helps, Of course!, Certainly!, You're absolutely right!, Would you like..., Want me to...?, Want me to give examples?, Should I continue?, let me know, here is a...
-**Problem:** Text meant as chatbot correspondence gets pasted as content.
-**Before:**
-> Here is an overview of the French Revolution. I hope this helps! Let me know if you'd like me to expand on any section.
-**After:**
-> The French Revolution began in 1789 when financial crisis and food shortages led to widespread unrest.
-
-### 21. Knowledge-Cutoff Disclaimers and Speculative Gap-Filling
-
-**Words to watch:** as of [date], Up to my last training update, While specific details are limited/scarce..., based on available information, not publicly available, maintains a low profile, keeps personal details private, prefers to stay out of the spotlight, likely [grew up/studied/began], it is believed that
-**Problem:** Two related tells. (a) Older models leave hard knowledge-cutoff disclaimers in the text. (b) When a model can't find a source, it writes a paragraph *about* not finding one and then invents plausible filler to cover the gap. For a private person the guess almost always lands on the same stock phrases ("maintains a low profile," "keeps personal details private"), none of it sourced. Say what isn't known, or cut the sentence; don't dress a guess up as fact.
-**Before (cutoff disclaimer):**
-> While specific details about the company's founding are not extensively documented in readily available sources, it appears to have been established sometime in the 1990s.
-**After:**
-> The company's founding date is not documented in the available sources. (Or cut the sentence. State a date only if a source provides one.)
-**Before (speculative gap-fill):**
-> Information about her early life is not publicly available, suggesting she maintains a low profile and keeps personal details private. She likely grew up in a middle-class household, which shaped her later interest in education reform.
-**After:**
-> Her early life is not documented in the available sources. (Or omit the section.)
-
-### 22. Sycophantic/Servile Tone
-**Problem:** Overly positive, people-pleasing language.
-**Before:**
-> Great question! You're absolutely right that this is a complex topic. That's an excellent point about the economic factors.
-**After:**
-> The economic factors you mentioned are relevant here.
-
-## FILLER AND HEDGING
-
-### 23. Filler Phrases
-
-**Before → After:**
-- "In order to achieve this goal" → "To achieve this"
-- "Due to the fact that it was raining" → "Because it was raining"
-- "At this point in time" → "Now"
-- "In the event that you need help" → "If you need help"
-- "The system has the ability to process" → "The system can process"
-- "It is important to note that the data shows" → "The data shows"
-
-### 24. Excessive Hedging
-**Problem:** Over-qualifying statements.
-**Before:**
-> It could potentially possibly be argued that the policy might have some effect on outcomes.
-**After:**
-> The policy may affect outcomes.
-
-### 25. Generic Positive Conclusions
-**Problem:** Vague upbeat endings.
-**Before:**
-> The future looks bright for the company. Exciting times lie ahead as they continue their journey toward excellence. This represents a major step in the right direction.
-**After:**
-> (Cut the paragraph. End on the last concrete fact instead of a send-off. If the source states real plans, use those.)
-
-### 26. Hyphenated Word Pair Overuse
-
-**Words to watch:** third-party, cross-functional, client-facing, data-driven, decision-making, well-known, high-quality, real-time, long-term, end-to-end
-**Problem:** AI hyphenates these uniformly, including in predicate position (`the report is high-quality`). Humans hyphenate inconsistently — typically only when the compound is attributive (`a high-quality report`) and often dropping the hyphen otherwise (`the report is high quality`). Keep attributive-position hyphens; drop them when the compound follows the noun.
-**Before:**
-> The cross-functional team delivered a high-quality, data-driven report. The team is cross-functional, the report is high-quality, and the methodology is data-driven.
-**After:**
-> The cross-functional team delivered a high-quality, data-driven report. The team is cross functional, the report is high quality, and the methodology is data driven.
-
-### 27. Persuasive Authority Tropes
-
-**Phrases to watch:** The real question is, at its core, in reality, what really matters, fundamentally, the deeper issue, the heart of the matter
-**Problem:** LLMs use these phrases to pretend they are cutting through noise to some deeper truth, when the sentence that follows usually just restates an ordinary point with extra ceremony.
-**Before:**
-> The real question is whether teams can adapt. At its core, what really matters is organizational readiness.
-**After:**
-> The question is whether teams can adapt. That mostly depends on whether the organization is ready to change its habits.
-
-### 28. Signposting and Announcements
-
-**Phrases to watch:** Let's dive in, let's explore, let's break this down, here's what you need to know, now let's look at, without further ado
-**Problem:** LLMs announce what they are about to do instead of doing it. This meta-commentary slows the writing down and gives it a tutorial-script feel.
-**Before:**
-> Let's dive into how caching works in Next.js. Here's what you need to know.
-**After:**
-> Next.js caches data at multiple layers, including request memoization, the data cache, and the router cache.
-
-### 29. Fragmented Headers
-
-**Signs to watch:** A heading followed by a one-line paragraph that simply restates the heading before the real content begins.
-**Problem:** LLMs often add a generic sentence after a heading as a rhetorical warm-up. It usually adds nothing and makes the prose feel padded.
-**Before:**
-> ## Performance
->
-> Speed matters.
->
-> When users hit a slow page, they leave.
-**After:**
-> ## Performance
->
-> When users hit a slow page, they leave.
-
-### 30. Diff-Anchored Writing
-**Problem:** Documentation or comments written as if narrating a change rather than describing the thing as it is. Unless the document is inherently version-scoped (changelogs, release notes, migration guides), it should read coherently without knowing what changed in the last commit.
-**Before:**
-> This function was added to replace the previous approach of iterating through all items, which caused O(n²) performance.
-**After:**
-> This function uses a hash map for O(1) lookups, avoiding the O(n²) cost of naive iteration.
-
-### 31. Manufactured Punchlines and Staccato Drama
-**Problem:** LLMs often make every sentence land like a quotable closer, then stack short declarative fragments to manufacture drama. A single short sentence for emphasis is fine; a run of them starts to sound engineered.
-**Before:**
-> Then AlphaEvolve arrived. It had no preference for symmetry. No aesthetic prior. No nostalgia for human taste. The old rules were gone.
-**After:**
-> AlphaEvolve changed the search because it did not favor symmetry or human-looking designs. That made some of the older assumptions less useful.
-
-### 32. Aphorism Formulas
-
-**Words to watch:** X is the Y of Z, X becomes a trap, X is not a tool but a mirror, the language of, the currency of, the architecture of
-**Problem:** LLMs turn ordinary claims into reusable aphorisms that sound profound without adding precision. Replace the formula with the concrete claim it is gesturing at.
-**Before:**
-> Symmetry is the language of trust. Efficiency becomes a trap when teams forget the human layer.
-**After:**
-> Symmetric layouts often feel more predictable to users. Teams can over-optimize workflows and miss how people actually use them.
-
-### 33. Conversational Rhetorical Openers
-
-**Phrases to watch:** Honestly?, Look, Here's the thing, The thing is, Let's be honest, Real talk, when used as standalone hooks or fake-candid pauses before an ordinary point.
-**Problem:** LLMs open with a fake-candid hook to manufacture intimacy before delivering a routine claim. The tell is the theatrical pause-and-reveal: a one-word question or aside, then the "real" answer. A person being honest usually just says the thing.
-**Before:**
-> Is it worth the price? Honestly? It depends on how often you'll use it.
-**After:**
-> Whether it's worth the price depends on how often you'll use it.
-
-## DETECTION GUIDANCE
-
-### What NOT to flag (false positives)
-
-A clean human writer can hit several of the patterns above without any AI involvement. Before rewriting, sanity-check that you are not gutting legitimate prose. The following are *not* reliable indicators on their own:
-
-- **Perfect grammar and consistent style.** Many writers are professionals or have been edited. Polish does not equal AI.
-- **Mixed casual and formal registers.** This often signals a person in a technical field, a young writer, or someone with neurodivergent prose habits — not a chatbot.
-- **"Bland" or "robotic" prose.** AI prose has *specific* tells. Generic dryness without those tells is just dry writing.
-- **Formal or academic vocabulary.** AI overuses *specific* fancy words (see §7), not all fancy words. Don't flatten "ostensibly" or "constituent" just because they sound brainy.
-- **Letter-style opening or closing on a comment.** Salutations and sign-offs predate ChatGPT by centuries.
-- **Common transition words in isolation.** *Additionally*, *moreover*, *consequently* are AI-coded only when piled up. One *however* is not a tell.
-- **Curly quotes alone.** macOS, Word, Google Docs, and most CMSes auto-curl by default. Curly quotes only count when stacked with other tells.
-- **Em dashes alone.** Many editors and journalists use them often. Em dashes are evidence only when paired with formulaic sales-y rhythm.
-- **One short emphatic sentence.** Humans use clipped sentences to land a point. Flag staccato drama only when several short fragments appear in a row and inflate the tone.
-- **"Honestly" or "look" mid-sentence.** These are ordinary in casual writing. The tell is the standalone theatrical opener, not the word itself.
-- **Unsourced claims.** Most of the web is unsourced. Lack of citations doesn't prove anything.
-- **Correct, complex formatting.** Visual editors and templates produce clean output without any AI.
-- **Secondhand text.** Do not rewrite watched phrases inside quotations, titles, proper names, or examples where the phrase is being discussed rather than used.
-
-When in doubt, look for **clusters** of tells, not isolated ones. A single em dash means nothing; em dashes plus rule-of-three plus *vibrant tapestry* plus a "Conclusion" section is a confession.
-
-### Signs of human writing (preserve these)
-
-When you see these, lean toward leaving the prose alone — they are evidence of a real person writing, and over-editing will destroy what makes the piece sound human:
-
-- **Specific, unusual, hard-to-fabricate detail.** A real address. A weird quote. The phrase "the lawyer who used to work upstairs from my dentist." LLMs round off specifics; humans hoard them.
-- **Mixed feelings and unresolved tension.** "I think this is mostly good, but it bothers me, and I can't fully explain why." LLMs default to clean takes.
-- **Dated, era-bound references.** Slang, memes, or in-jokes that map to a specific year and subculture. Models lag by a year or more.
-- **First-person editorial choices the writer can defend.** If the writer can explain *why* they made a particular cut or used a particular word, that's a strong human signal.
-- **Variety in sentence length.** Real writing alternates short and long. AI writing tends toward an even, mid-length cadence.
-- **Genuine asides, parentheticals, or self-corrections.** "(I keep wanting to say 'almost' here, but it really was certain.)" Models rarely interrupt themselves like this.
-- **Edits made before November 30, 2022.** ChatGPT's public launch. Anything older than that is, with very rare exceptions, not AI-written.
-
----
-
-## Invocation Modes
-
-**Pasted text (default).** The user gives text in the conversation. Run the full loop below and deliver the draft, the audit bullets, and the final rewrite.
-
-**File mode.** The user points at a file. Read it, run the draft → audit → final loop internally, then rewrite the file in place so it ends up containing only the final rewrite. Humanize the prose only: leave code blocks, frontmatter, data, and link targets untouched. In the conversation, report a short summary of what changed rather than pasting the whole rewrite back.
-
-**Embedded mode.** Another task or agent is using this skill as one step of a larger job (a PR description, a commit message, a doc). Run the loop internally and output only the final text. No draft, no audit bullets, no summary. The caller wants prose, not ceremony.
-
-## Process and Output
-
-1. Read the input carefully and identify every instance of the patterns above.
-2. Write a **draft rewrite**. Check that it reads naturally aloud, varies sentence length, prefers specific details and simple constructions (is/are/has), and keeps the appropriate register.
-3. Ask two questions: **"What makes the below so obviously AI generated?"** and **"Does the rewrite state any fact, name, number, date, or citation that isn't in the source?"** Answer briefly. A fabrication is a defect even when it sounds more human than the vague original.
-4. Revise into a **final rewrite** that addresses them and contains no em or en dashes (see §14).
-
-In pasted-text mode, deliver the draft, the brief "still-AI" bullets, the final rewrite, and (optionally) a short summary of changes. In file and embedded modes, run the same loop but deliver only what the mode calls for (see Invocation Modes).
-
-## Reference
-
-This skill is based on [Wikipedia:Signs of AI writing](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing), maintained by WikiProject AI Cleanup. The patterns documented there come from observations of thousands of instances of AI-generated text on Wikipedia.
-
-Key insight from Wikipedia: "LLMs use statistical algorithms to guess what should come next. The result tends toward the most statistically likely result that applies to the widest variety of cases."
+## 5. 작업 절차
+
+0. **트리아지**: 무엇을 어디까지 고칠지 먼저 정한다.
+   - 스캐너 결과가 S1 0건이고 S2도 두어 건이면 손대지 않고 그렇게 보고한다. 멀쩡한 글을 평균값으로 깎는 게 가장 흔한 실패다.
+   - **서식만 문제면 서식만 고친다.** 볼드 떡칠·이모지·줄표가 전부라면 산문은 그대로 둔다.
+   - 프리셋이 리스타일 계열이면 사실 대장을 먼저 뽑는다.
+   - 목표 글자수가 있으면 메모한다.
+1. **탐지**: 스캐너 결과에 문맥 판단을 더해 흔적을 확정한다. S1부터 본다.
+2. **윤문**: 흔적을 자연스러운 표현으로 *교체*한다. 지우고 끝내지 않는다. 원문이 다루는 내용은 빠짐없이 다룬다.
+3. **감사**: 다시 묻는다. "이 글이 왜 아직 AI 같은가?" 그리고 "결과물에 원문에 없는 사실·이름·수치·인용이 있는가?" 잔존 흔적을 짚고, *내가* 동의어 돌려쓰기나 접속어 추가로 새 흔적을 만들지 않았는지 본다. 스캐너를 결과물에 다시 돌린다. 자가검증(6절) 위반이면 해당 edit을 롤백한다. 루프는 최대 1~2회.
+4. **등급**: 자가 채점한다. C·D면 추가 윤문이나 사람 검토를 권한다.
+
+## 6. 자가검증 (한 항목이라도 위반이면 해당 edit 롤백)
+
+1. **사실 보존**: 고유명사·수치·날짜·인용이 원문과 한 글자도 다르지 않다. 리스타일 프리셋이면 사실 대장 대조를 마쳤다.
+2. **날조 없음**: 원문에 없던 사실·이름·수치·출처가 결과물에 없다.
+3. **가드 통과**: `general`·`dev-blog`는 변경률 30% 이하. 리스타일 프리셋은 사실 대장 전항 일치.
+4. **프리셋 부합**: 어투·분량·이모지·해시태그·구조가 프리셋 규격 안에 있다.
+5. **잔존 S1 0건**: 프리셋이 완화한 것을 뺀 나머지 S1이 남지 않았다.
+6. **인공 표현 자제**: 원문에 없던 비유·수사를 임의로 더하지 않았다.
+
+## 7. 품질 등급
+
+- **A**: S1 잔존 0건, S2 잔존 2건 이하, 자가검증 6항 통과.
+- **B**: S1 잔존 0건, S2 잔존 4건 이하, 자가검증 5항 이상 통과.
+- **C**: S1 잔존 1~2건 또는 프리셋 규격 이탈 → 2차 윤문 권고.
+- **D**: S1 잔존 3건 이상, 또는 사실 대장 불일치, 또는 변경률 50% 초과 → 작업 중단, 사람 검토 권고.
+
+## 8. Length control
+
+프리셋에 분량 규격이 있으면 그것을 따른다. 사용자가 목표 분량을 따로 주면 사용자 쪽이 이긴다.
+
+- 단위 기본값은 **공백 포함 글자수**다. "공백 제외"를 명시하면 그쪽으로 센다. 애매하면 두 수치를 함께 보고한다.
+- 허용 오차 ±5%가 기본이다("정확히"를 요구하면 ±2%).
+- **늘릴 때**: 군더더기로 채우지 않는다. 그건 이 스킬이 지우려는 흔적이다. 원문에 있는 구체적 사실을 풀어서 분량을 만든다. 채울 구체가 부족하면 추측하지 말고 되묻는다.
+- **줄일 때**: 완충 표현·막연한 마무리·중복부터 덜어낸다. 구체적 디테일과 핵심 사실은 마지막까지 지킨다.
+- **글자수는 추정하지 말고 센다.** `python3 -m humanizer metrics`가 자모 결합과 이모지를 고려해 센다.
+
+## 9. Voice Calibration
+
+사용자가 자기 글 샘플을 주면 다시 쓰기 전에 분석한다.
+
+1. **샘플을 읽고 메모한다.** 문장 길이 패턴, 종결어미와 문체, 어휘 수준, 입버릇과 접속 습관, 한자어·외래어 비중.
+2. **그 목소리로 다시 쓴다.** 흔적을 지우는 데서 그치지 말고 샘플 말투로 대체한다. 글쓴이가 "되게·약간"을 쓰면 "매우·다소"로 격상하지 않는다.
+3. **샘플은 이 스킬의 문체 규칙을 이긴다.** 샘플이 줄표를 쓰면 샘플 빈도만큼 남긴다. 글쓴이를 맞추는 게 흔적을 지우는 것보다 우선이다. 사실 불변 철칙만은 예외 없다.
+4. 샘플이 없으면 프리셋 기본값으로 간다.
+
+## 10. PERSONALITY AND SOUL
+
+흔적을 지우는 건 절반이다. 영혼 없는 글은 슬롭만큼이나 티가 난다.
+
+**글의 성격이 허락할 때만 적용한다.** 블로그·에세이·후기·개인 글에는 목소리가 필요하다. 백과사전·기술 문서·법률·공문에서는 담백한 문체 자체가 올바른 사람의 목소리다. 거기에 사견과 1인칭을 억지로 넣지 않는다.
+
+영혼 없는 글의 징후: 문장 길이와 구조가 전부 같다, 의견 없이 중립 보고만 한다, 망설임이나 복잡한 심경이 없다, 어울리는 자리인데 1인칭이 없다, 보도자료처럼 읽힌다.
+
+목소리를 넣는 법: 의견을 가진다. 짧게 치다가 한 번씩 길게 흘린다. 곁가지와 여담을 허용한다. 다만 목소리를 만들려고 **없는 사실을 더하지 않는다.** 의견과 반응은 목소리지 사실이 아니다.
+
+## 11. Invocation Modes
+
+**붙여진 텍스트 (기본).** 대화에 글이 들어온다. 전체 루프를 돌고 초안·감사·최종본을 낸다.
+
+**파일 모드.** 사용자가 파일을 가리킨다. 읽고 루프를 내부에서 돈 뒤 파일을 최종본으로 덮어쓴다. 산문만 손댄다. 코드블록·프런트매터·데이터·링크 주소는 그대로 둔다. 대화에는 무엇이 바뀌었는지 요약만 보고하고 전문을 다시 붙이지 않는다.
+
+**임베드 모드.** 다른 작업이나 에이전트가 이 스킬을 한 단계로 쓴다(PR 설명, 커밋 메시지, 문서). 루프를 내부에서 돌고 최종 텍스트만 낸다. 초안도 감사도 요약도 없다.
+
+## 12. Process and Output
+
+산출물 순서: 스캐너 결과 요약 → 초안 → "아직 AI 같은 점" 짧은 글머리표(잔존 흔적 + 심각도) → 최종본 → 고친 내용 한 줄 요약 + 등급(A~D).
+
+프리셋과 분량 규격이 걸려 있으면 최종 글자수(공백 포함/제외)와 프리셋 이름을 함께 적는다. 사용자가 "결과만 줘"라고 하면 최종본만 낸다. 파일·임베드 모드는 11절을 따른다.
+
+## 13. Done when
+
+- 프리셋이 완화한 것을 뺀 잔존 S1이 0건이고, 스캐너로 확인했다.
+- 최종본에 줄표(`—`, `–`)가 없다. 프리셋이 허용하지 않는 이모지도 없다.
+- 번역체(직역 조사, "가지다", 이중피동, "그/그녀" 강박, 좌향 수식)가 자연스러운 한국어로 풀렸다.
+- 원문 내용을 빠짐없이 다뤘고 사실을 바꾸거나 지어내지 않았다. 리스타일 프리셋이면 사실 대장을 대조했다.
+- 프리셋 규격(어투·분량·구조·강화 항목)을 만족한다.
+- 자가검증 6항을 통과했고 등급을 매겼다.
+
+## 14. When NOT to use
+
+- 맞춤법·띄어쓰기 교정만 필요할 때
+- 사실관계 확인이나 출처 보강이 핵심일 때. 이 스킬은 문체를 고치고 사실을 검증하지 않는다.
+- 원문에 없는 내용을 창작해 채워야 할 때. 그건 humanizer가 아니라 생성 작업이다.
+- 문학 창작. 지어낸 디테일이 목적인 글에는 사실 불변 철칙이 맞지 않는다.
+
+## 15. Reference
+
+한국어 흔적 판정의 1순위는 **번역체**와 격식을 가장한 **상투어**다. 영어 흔적 판정의 1순위는 em dash와 rule of three다. 두 언어의 뿌리는 같다. LLM은 통계적으로 가장 그럴듯한 다음 토큰을 고르고, 그래서 가장 무난하고 넓게 들어맞는 표현으로 수렴한다. AI 티를 지운다는 건 그 평균값에서 벗어나 구체적이고 들쭉날쭉한 사람의 선택으로 되돌리는 일이다.
+
+패턴은 단발이 아니라 **무더기**로 판단한다. 의심스러우면 지우기보다 남긴다.
+
+계보와 출처는 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)에 있다.

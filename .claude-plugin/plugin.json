@@ -1,14 +1,14 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "humanizer",
-  "description": "Remove signs of AI-generated writing from text, making it sound more natural and human. Based on Wikipedia's \"Signs of AI writing\" guide.",
-  "version": "2.9.1",
+  "description": "한국어 우선 AI 글 흔적 제거 스킬. 채널별 어투 프리셋(네이버 블로그·개발자 블로그·인스타 게시글·릴스·댓글)과 결정론 스캐너를 갖췄다. A Korean-first humanizer with channel presets and a deterministic scanner.",
+  "version": "3.0.0",
   "author": {
-    "name": "blader",
-    "url": "https://github.com/blader"
+    "name": "kjungmo",
+    "url": "https://github.com/kjungmo"
   },
-  "homepage": "https://github.com/blader/humanizer",
-  "repository": "https://github.com/blader/humanizer",
+  "homepage": "https://github.com/kjungmo/humanizer",
+  "repository": "https://github.com/kjungmo/humanizer",
   "license": "MIT",
-  "keywords": ["writing", "editing", "ai-detection", "humanize", "prose", "style"]
+  "keywords": ["writing", "editing", "ai-detection", "humanize", "korean", "prose", "style", "instagram", "blog"]
 }
