@@ -1,4 +1,4 @@
 interface:
-  display_name: "Humanizer"
-  short_description: "Remove AI writing patterns from prose"
-  default_prompt: "Use $humanizer to make this text sound natural while preserving its meaning and facts."
+  display_name: "Humanizer (한국어 우선)"
+  short_description: "AI 글 흔적을 지우고 채널별 어투로 다시 쓴다"
+  default_prompt: "Use $humanizer to make this text sound human while preserving every fact. 한국어면 프리셋을 고르고(general·naver-blog·dev-blog·instagram-post·instagram-reels·instagram-comment) 사실은 한 글자도 바꾸지 마세요."
