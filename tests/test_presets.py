@@ -57,9 +57,20 @@ class TestRegistry(unittest.TestCase):
             with self.subTest(preset=preset_id):
                 self.assertFalse(presets.relaxed(preset_id) & presets.NEVER_RELAXED)
 
+    def test_only_general_and_dev_blog_keep_the_change_rate_guard(self):
+        # `SKILL.md` 4절이 이 두 개만 변경률 가드라고 선언한다. 어투와 분량을
+        # 옮기는 프리셋에서는 변경률이 언제나 30%를 넘어 가드가 뜻을 잃는다.
+        change_rate = {
+            pid for pid, preset in presets.PRESETS.items() if preset.guard == "change-rate"
+        }
+        self.assertEqual({"general", "dev-blog"}, change_rate)
+
     def test_restyle_presets_use_fact_ledger(self):
-        for preset_id in ("instagram-post", "instagram-reels", "instagram-comment"):
-            self.assertEqual("fact-ledger", presets.get(preset_id).guard)
+        for preset_id in (
+            "naver-blog", "instagram-post", "instagram-reels", "instagram-comment"
+        ):
+            with self.subTest(preset=preset_id):
+                self.assertEqual("fact-ledger", presets.get(preset_id).guard)
 
     def test_general_relaxes_nothing(self):
         self.assertEqual(frozenset(), presets.get("general").relax)
@@ -73,6 +84,10 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual("원문 ±5%", presets.get("general").budget)
         self.assertEqual("1,000~2,000자", presets.get("naver-blog").budget)
         self.assertEqual("40자 이내", presets.get("instagram-comment").budget)
+
+    def test_dev_blog_budget_is_not_confused_with_general(self):
+        # 둘 다 상·하한이 없지만 뜻이 다르다. 개발 블로그는 길어도 되는 채널이다.
+        self.assertEqual("상한 없음", presets.get("dev-blog").budget)
 
 
 class TestDocSync(unittest.TestCase):
@@ -104,6 +119,57 @@ class TestDocSync(unittest.TestCase):
             if preset.pack:
                 with self.subTest(preset=preset.id):
                     self.assertTrue((ROOT / preset.pack).is_file())
+
+    def test_pack_documents_its_own_guard(self):
+        """팩 문서가 코드와 다른 가드를 안내하면 사람이 그 문서를 믿는다."""
+        wording = {"change-rate": "변경률 가드가 유효하다", "fact-ledger": "사실 대장을 쓴다"}
+        for preset in presets.PRESETS.values():
+            if not preset.pack:
+                continue
+            text = (ROOT / preset.pack).read_text(encoding="utf-8")
+            with self.subTest(preset=preset.id):
+                self.assertIn(wording[preset.guard], text)
+
+    def test_packs_declare_every_relaxed_rule(self):
+        for preset in presets.PRESETS.values():
+            if not preset.pack:
+                continue
+            text = (ROOT / preset.pack).read_text(encoding="utf-8")
+            for rule_id in preset.relax:
+                with self.subTest(preset=preset.id, rule=rule_id):
+                    self.assertIn(rule_id, text, f"{preset.pack}에 {rule_id} 설명이 없습니다")
+
+
+class TestFixtureIntegrity(unittest.TestCase):
+    """픽스처가 스스로 지켜야 하는 것."""
+
+    FIXTURES = ROOT / "eval" / "fixtures"
+    FENCE = re.compile(r"```.*?```", re.DOTALL)
+
+    def test_code_blocks_survive_the_edit(self):
+        """코드블록은 윤문 전후가 바이트 단위로 같아야 한다.
+
+        스캐너의 마스킹은 탐지에서만 빼 준다. 윤문하며 코드를 건드리는 건
+        사람이고, 그러면 복사해서 돌아가지 않는 글이 된다.
+        """
+        for expect in sorted(self.FIXTURES.rglob("*.expect.json")):
+            stem = expect.with_suffix("").with_suffix("")
+            before = self.FENCE.findall(
+                stem.with_suffix(".before.md").read_text(encoding="utf-8")
+            )
+            after = self.FENCE.findall(
+                stem.with_suffix(".after.md").read_text(encoding="utf-8")
+            )
+            with self.subTest(case=f"{stem.parent.name}/{stem.name}"):
+                self.assertEqual(before, after)
+
+    def test_every_preset_with_a_pack_has_fixtures(self):
+        for preset in presets.PRESETS.values():
+            if not preset.pack:
+                continue
+            with self.subTest(preset=preset.id):
+                cases = list((self.FIXTURES / preset.id).glob("*.expect.json"))
+                self.assertGreaterEqual(len(cases), 1)
 
 
 if __name__ == "__main__":

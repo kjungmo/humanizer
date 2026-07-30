@@ -1,0 +1,19 @@
+{
+  "preset": "naver-blog",
+  "note": "완화의 경계를 지키는 케이스. 이모지(C-5)·숫자 괄호(C-9)·콜론 헤딩(C-10)·해요체 종결 반복(E-2)·볼드(J-1)는 이 채널에서 흔적이 아니므로 before와 after 양쪽에 그대로 남아 있어야 한다. 반대로 hype(D-4)와 줄표(J-2)는 완화 선언과 무관하게 흔적이다. after는 그 마지막 문단만 걷어냈다.",
+  "before": {
+    "must_detect": [
+      "D-4",
+      "J-2"
+    ],
+    "s1_min": 2
+  },
+  "after": {
+    "s1_max": 0,
+    "must_not_detect": [
+      "D-4",
+      "J-2"
+    ]
+  },
+  "change_rate_max": 0.35
+}

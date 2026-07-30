@@ -113,6 +113,13 @@ class TestMasking(unittest.TestCase):
         self.assertNotIn("J-2", found)
         self.assertNotIn("C-5", found)
 
+    def test_double_passive_covers_hamnida_inflections(self):
+        # 합니다체에서는 '되어집니다' 꼴로 나타난다. '되어지'를 찾으면 못 잡는다.
+        for text in ("데이터가 수집되어집니다.", "그렇게 보여집니다.", "결과가 확인되어짐."):
+            with self.subTest(text=text):
+                found = {f.rule_id for f in detect.scan(text).findings}
+                self.assertIn("A-8", found)
+
     def test_inline_code_is_not_scanned(self):
         found = {f.rule_id for f in detect.scan("`보여진다` 를 설명한다.").findings}
         self.assertNotIn("A-8", found)
