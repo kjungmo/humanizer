@@ -27,9 +27,14 @@ class Preset:
     relax: FrozenSet[str] = field(default_factory=frozenset)
     pack: Optional[str] = None
     enforce: tuple = ()
+    #: 상·하한이 없는데 뜻이 다를 때 쓴다. `general`은 원문에 맞추라는 뜻이고
+    #: `dev-blog`는 길어야 할 이유가 있으면 길어도 된다는 뜻이다.
+    budget_label: Optional[str] = None
 
     @property
     def budget(self) -> str:
+        if self.budget_label:
+            return self.budget_label
         if self.char_min is None and self.char_max is None:
             return "원문 ±5%"
         if self.char_max is None:
@@ -63,9 +68,11 @@ _NAVER_BLOG = Preset(
     emoji="문단 끝 1~2개",
     hashtags="본문 밖 5~10개",
     structure="짧은 문단 + 소제목",
-    guard="change-rate",
+    # 어투를 해요체로 옮기고 분량을 1,000~2,000자에 맞추면 사실상 재작성이다.
+    # 변경률 30%는 언제나 넘는다. 사실 대장이 그 자리를 대신한다.
+    guard="fact-ledger",
     relax=frozenset({"C-5", "C-9", "C-10", "E-2", "J-1"}),
-    pack=None,
+    pack="packs/ko/presets/naver-blog.md",
     enforce=("핵심어 자연 반복 3~5회", "사진 삽입 지점 표시", "1인칭 체험 근거"),
 )
 
@@ -78,10 +85,12 @@ _DEV_BLOG = Preset(
     emoji="금지",
     hashtags="없음",
     structure="소제목 + 코드블록",
+    # 구조와 분량을 원문에서 가져오므로 변경률이 아직 뜻을 가진다.
     guard="change-rate",
     relax=frozenset({"B-1", "C-9", "C-10", "J-1"}),
-    pack=None,
+    pack="packs/ko/presets/dev-blog.md",
     enforce=("코드·명령어·버전 문자열 무변경", "재현 절차", "근거 링크 자리"),
+    budget_label="상한 없음",
 )
 
 _IG_POST = Preset(
