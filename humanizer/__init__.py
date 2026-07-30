@@ -4,7 +4,7 @@
 결정론으로 제공한다. 외부 의존성이 없고 파이썬 3.8 이상에서 동작한다.
 """
 
-from . import detect, metrics, presets  # noqa: F401
+from . import detect, metrics, presets, voice  # noqa: F401
 
-__all__ = ["detect", "metrics", "presets"]
-__version__ = "3.0.0"
+__all__ = ["detect", "metrics", "presets", "voice"]
+__version__ = "3.1.0"

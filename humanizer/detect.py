@@ -435,6 +435,26 @@ class ScanResult:
         }
 
 
+def raw_counts(text: str) -> Dict[str, int]:
+    """규칙별 원시 발생 수. 임계값도 프리셋 완화도 적용하지 않는다.
+
+    말투 프로필이 개인 기준선을 잡을 때 쓴다. "이 사람은 문두 접속사를
+    100문장당 몇 번 쓰는가"를 알려면 임계값을 넘겼는지가 아니라 날것의 수가 필요하다.
+    """
+    masked = mask_protected(text)
+    counts: Dict[str, int] = {}
+    for rule in RULES:
+        handler = CUSTOM.get(rule.id)
+        if handler is not None:
+            count, _, _ = handler(masked)
+        elif rule.pattern is not None:
+            count, _, _ = _regex_hits(rule, masked)
+        else:  # pragma: no cover - 규칙 표 실수 방어
+            raise RuntimeError(f"규칙 {rule.id}에 패턴도 핸들러도 없습니다")
+        counts[rule.id] = count
+    return counts
+
+
 def scan(text: str, preset: str = presets.DEFAULT) -> ScanResult:
     """프리셋을 반영해 흔적을 센다. 완화된 규칙은 아예 보고하지 않는다."""
     relax = presets.relaxed(preset)
