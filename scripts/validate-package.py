@@ -25,8 +25,11 @@ REQUIRED_FILES = (
     "humanizer/detect.py",
     "humanizer/metrics.py",
     "humanizer/presets.py",
+    "humanizer/voice.py",
     "humanizer/cli.py",
     "eval/score.py",
+    "voice/TEMPLATE.md",
+    "voice/.gitignore",
     "THIRD-PARTY-NOTICES.md",
     "LICENSE",
 )
@@ -111,6 +114,24 @@ if undocumented:
 skill_lines = len(SKILL.splitlines())
 if skill_lines > SKILL_LINE_BUDGET:
     fail(f"SKILL.md가 {SKILL_LINE_BUDGET}줄 이식성 예산을 넘었습니다 ({skill_lines}줄)")
+
+# --- 개인 프로필이 새어 나가지 않는지 --------------------------------------
+#
+# 파일이 있는지가 아니라 무시 규칙이 살아 있는지를 본다. 로컬에 프로필을 뜬
+# 사용자를 검증 실패로 만들면 안 된다. 프로필은 원래 로컬에 쌓이는 물건이다.
+
+ignore_rules = [
+    line.strip()
+    for line in (ROOT / "voice" / ".gitignore").read_text(encoding="utf-8").splitlines()
+    if line.strip() and not line.startswith("#")
+]
+if ignore_rules[:1] != ["*"]:
+    fail("voice/.gitignore는 `*`로 전부 막고 필요한 것만 열어야 합니다")
+for allowed in ("!.gitignore", "!TEMPLATE.md"):
+    if allowed not in ignore_rules:
+        fail(f"voice/.gitignore에 {allowed}가 없습니다")
+if any(rule.startswith("!") and rule.endswith(".json") for rule in ignore_rules):
+    fail("voice/.gitignore가 프로필 JSON을 열어 두었습니다. 커밋 대상이 아닙니다")
 
 print(
     f"humanizer 패키지 v{skill_version} 정상 "

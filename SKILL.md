@@ -12,7 +12,7 @@ description: |
   "humanize this", "make this sound human" 같은 요청에 사용.
 license: MIT
 metadata:
-  version: "3.0.0"
+  version: "3.1.0"
 ---
 
 # Humanizer: AI 글 흔적 지우기 (한국어 우선 · 채널 프리셋)
@@ -36,6 +36,7 @@ metadata:
 python3 -m humanizer detect 파일.md --preset general      # 흔적 목록 + 심각도
 python3 -m humanizer metrics 파일.md --target 1000        # 글자수·문장 길이 분포
 python3 -m humanizer diff 원본.md 결과물.md                # 변경률
+python3 -m humanizer profile 표본*.md --name 이름          # 글쓴이 말투 프로필 (9절)
 ```
 
 파일이 없고 대화에 붙여진 텍스트라면 표준입력으로 넘긴다(`... | python3 -m humanizer detect - --preset general`).
@@ -134,8 +135,19 @@ python3 -m humanizer diff 원본.md 결과물.md                # 변경률
 
 1. **샘플을 읽고 메모한다.** 문장 길이 패턴, 종결어미와 문체, 어휘 수준, 입버릇과 접속 습관, 한자어·외래어 비중.
 2. **그 목소리로 다시 쓴다.** 흔적을 지우는 데서 그치지 말고 샘플 말투로 대체한다. 글쓴이가 "되게·약간"을 쓰면 "매우·다소"로 격상하지 않는다.
-3. **샘플은 이 스킬의 문체 규칙을 이긴다.** 샘플이 줄표를 쓰면 샘플 빈도만큼 남긴다. 글쓴이를 맞추는 게 흔적을 지우는 것보다 우선이다. 사실 불변 철칙만은 예외 없다.
+3. **샘플은 이 스킬의 문체 규칙을 이긴다.** 글쓴이를 맞추는 게 흔적을 지우는 것보다 우선이다. 사실 불변 철칙만은 예외 없다.
 4. 샘플이 없으면 프리셋 기본값으로 간다.
+
+샘플이 여러 편이면 감으로 읽지 말고 프로필을 뜬다.
+
+```bash
+python3 -m humanizer profile 표본*.md --name 이름     # voice/이름.json + .md
+python3 -m humanizer detect 초안.md --voice voice/이름.json
+```
+
+`profile`은 재기 전에 표본을 두 번 거른다. 하나는 **AI가 쓴 덩어리**다. 요즘 메모장에는 생성기가 쓴 요약이 섞여 있고, 그걸 그대로 재면 그 사람 말투가 아니라 AI 말투를 학습한다. 다른 하나는 **붙여넣은 로그와 셸 출력**이다. 개발자 메모는 절반이 그것이라 종결 유형이 전부 개조식으로 뭉개진다. 무엇을 얼마나 버렸는지는 프로필에 적힌다.
+
+`detect --voice`는 개인 기준선의 1.5배까지를 그 사람 말투로 보고 S3으로 낮춘다. **줄표(J-2)·hype 어휘(D-4)·챗봇 잔재(K-1)는 낮추지 않는다.** 그건 누구의 말투도 아니다.
 
 ## 10. PERSONALITY AND SOUL
 
