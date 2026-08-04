@@ -163,6 +163,39 @@ class TestFixtureIntegrity(unittest.TestCase):
             with self.subTest(case=f"{stem.parent.name}/{stem.name}"):
                 self.assertEqual(before, after)
 
+    def test_declared_budgets_match_the_preset_dials(self):
+        """픽스처가 분량을 선언했으면 그 값은 프리셋 다이얼이어야 한다.
+
+        픽스처가 제 편한 숫자를 적으면 규격을 지킨 척만 하게 된다.
+        """
+        import json
+
+        for expect_path in sorted(self.FIXTURES.rglob("*.expect.json")):
+            expect = json.loads(expect_path.read_text(encoding="utf-8"))
+            preset = presets.get(expect.get("preset", presets.DEFAULT))
+            after = expect["after"]
+            with self.subTest(case=expect_path.parent.name + "/" + expect_path.name):
+                if "char_min" in after:
+                    self.assertEqual(preset.char_min, after["char_min"])
+                if "char_max" in after:
+                    self.assertEqual(preset.char_max, after["char_max"])
+
+    def test_presets_with_a_budget_have_a_fixture_that_checks_it(self):
+        """분량이 채널 규격의 일부인 프리셋은 그걸 지키는 픽스처를 가져야 한다."""
+        import json
+
+        for preset in presets.PRESETS.values():
+            if not preset.pack or (preset.char_min is None and preset.char_max is None):
+                continue
+            checked = any(
+                {"char_min", "char_max"} & set(
+                    json.loads(p.read_text(encoding="utf-8"))["after"]
+                )
+                for p in (self.FIXTURES / preset.id).glob("*.expect.json")
+            )
+            with self.subTest(preset=preset.id):
+                self.assertTrue(checked, f"{preset.id}의 분량 규격을 재는 픽스처가 없습니다")
+
     def test_every_preset_with_a_pack_has_fixtures(self):
         for preset in presets.PRESETS.values():
             if not preset.pack:

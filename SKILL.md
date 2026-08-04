@@ -12,7 +12,7 @@ description: |
   "humanize this", "make this sound human" 같은 요청에 사용.
 license: MIT
 metadata:
-  version: "3.2.0"
+  version: "3.3.0"
 ---
 
 # Humanizer: AI 글 흔적 지우기 (한국어 우선 · 채널 프리셋)

@@ -104,7 +104,7 @@ _IG_POST = Preset(
     structure="1~2문장마다 줄바꿈",
     guard="fact-ledger",
     relax=frozenset({"A-16", "C-5", "E-1", "E-2", "J-1", "J-4"}),
-    pack=None,
+    pack="packs/ko/presets/instagram-post.md",
     enforce=("첫 2줄 안에 훅", "마지막 CTA 한 줄"),
 )
 
@@ -119,7 +119,7 @@ _IG_REELS = Preset(
     structure="씬 번호 + 자막 줄",
     guard="fact-ledger",
     relax=frozenset({"A-16", "C-5", "E-1", "E-2", "J-1", "J-4"}),
-    pack=None,
+    pack="packs/ko/presets/instagram-reels.md",
     enforce=("0~3초 훅 필수", "자막 한 줄 12자 이내", "구어 축약"),
 )
 
@@ -134,7 +134,7 @@ _IG_COMMENT = Preset(
     structure="한 줄",
     guard="fact-ledger",
     relax=frozenset({"A-16", "B-1", "C-5", "E-1", "E-2", "J-1", "J-4"}),
-    pack=None,
+    pack="packs/ko/presets/instagram-comment.md",
     enforce=("상대 언급 1회", "공감 또는 질문 1개", "광고 티 금지"),
 )
 

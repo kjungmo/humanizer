@@ -25,6 +25,23 @@ from humanizer import detect, metrics  # noqa: E402
 
 FIXTURES = ROOT / "eval" / "fixtures"
 
+#: 팩이 정한 산출물 형식이다. 이 표지가 나오면 그 아래는 본문이 아니다.
+#: 분량 규격은 본문만 센다. 해시태그와 캡션 블록은 세지 않는다.
+_TRAILING_BLOCKS = ("[해시태그]", "[캡션]")
+_LEADING_MARKERS = ("[본문]", "[대본]")
+
+
+def body(text: str) -> str:
+    """분량을 셀 대상만 남긴다."""
+    lines = []
+    for line in text.splitlines():
+        if line.strip().startswith(_TRAILING_BLOCKS):
+            break
+        if line.strip() in _LEADING_MARKERS:
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
 
 def check(stem: Path) -> list:
     """한 케이스를 채점한다. 반환값은 실패 사유 목록이며, 비어 있으면 통과다."""
@@ -59,6 +76,34 @@ def check(stem: Path) -> list:
         rate = metrics.change_rate(before, after)
         if rate > limit:
             failures.append(f"변경률 {rate:.1%}, 상한 {limit:.0%}")
+
+    # 분량 규격. 채널 프리셋에서는 이게 흔적 제거만큼 중요하다.
+    # 700자짜리 인스타 캡션과 40자짜리 댓글은 규격을 넘기는 순간 그 채널의 글이 아니다.
+    counted = metrics.char_count(body(after))
+    floor = expect["after"].get("char_min")
+    if floor is not None and counted < floor:
+        failures.append(f"본문 {counted}자, 최소 {floor}자 필요")
+    cap = expect["after"].get("char_max")
+    if cap is not None and counted > cap:
+        failures.append(f"본문 {counted}자, 상한 {cap}자")
+
+    # 줄 단위 상한. 릴스 자막은 세로 화면에서 12자를 넘으면 두 줄로 접히고,
+    # 접히면 못 읽는다. 팩이 실패 조건으로 선언한 규칙이라 기계가 본다.
+    # 들여쓴 줄만 본다. 화면 지시 `(화면: ...)`는 자막이 아니다.
+    line_cap = expect["after"].get("max_line_chars")
+    if line_cap is not None:
+        overlong = [
+            line.strip()
+            for line in body(after).splitlines()
+            if line[:1].isspace()
+            and line.strip()
+            and not line.strip().startswith("(")
+            and metrics.char_count(line.strip()) > line_cap
+        ]
+        if overlong:
+            failures.append(
+                f"{line_cap}자 넘는 줄 {len(overlong)}개: {overlong[0]!r}"
+            )
 
     return failures
 
