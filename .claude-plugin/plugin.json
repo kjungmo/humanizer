@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "humanizer",
   "description": "한국어 우선 AI 글 흔적 제거 스킬. 채널별 어투 프리셋(네이버 블로그·개발자 블로그·인스타 게시글·릴스·댓글)과 결정론 스캐너를 갖췄다. A Korean-first humanizer with channel presets and a deterministic scanner.",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "author": {
     "name": "kjungmo",
     "url": "https://github.com/kjungmo"

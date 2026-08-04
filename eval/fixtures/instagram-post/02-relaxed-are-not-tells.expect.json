@@ -1,0 +1,21 @@
+{
+  "preset": "instagram-post",
+  "note": "완화의 경계. 이모지(C-5)·물결표(J-4)·대명사(A-16)·종결어미 반복(E-2)·짧은 문장 균일(E-1)은 이 채널에서 흔적이 아니므로 before와 after 양쪽에 그대로 남아 있어야 한다. 반대로 hype(D-4)와 줄표(J-2)는 완화 선언과 무관하게 흔적이다. after는 그 한 문장만 걷어냈다. 같은 글을 general로 스캔하면 C-5와 E-2가 추가로 잡힌다.",
+  "before": {
+    "must_detect": [
+      "D-4",
+      "J-2"
+    ],
+    "s1_min": 2
+  },
+  "after": {
+    "s1_max": 0,
+    "must_not_detect": [
+      "D-4",
+      "J-2"
+    ],
+    "char_min": 300,
+    "char_max": 700
+  },
+  "change_rate_max": 0.25
+}
