@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import detect, metrics, presets
+from . import detect, metrics, presets, voice
 
 
 def _read(source: str) -> str:
@@ -72,6 +72,35 @@ def _print_diff(rate: float, preset: presets.Preset) -> None:
         print("가드 통과(30% 이하).")
 
 
+def _print_profile(profile: voice.VoiceProfile, paths: list) -> None:
+    s = profile.screening
+    print(f"말투 프로필: {profile.name}")
+    print(f"표본 {len(paths)}개 · 남은 글자 {profile.volume['chars']:,}자 · "
+          f"문장 {profile.volume['sentences']:,}개")
+    print(
+        f"버림: AI가 쓴 덩어리 {s['blocks_dropped']}/{s['blocks']}개 "
+        f"({s['dropped_ratio']:.1%}) · 산문이 아닌 줄 {s['prose']['dropped_ratio']:.1%}"
+    )
+    if s["dropped_by_rule"]:
+        print("  근거: " + ", ".join(
+            f"{rule} {count}회" for rule, count in s["dropped_by_rule"].items()
+        ))
+    if profile.volume["sentences"] < voice.MIN_SENTENCES:
+        print(
+            f"\n경고: 문장이 {voice.MIN_SENTENCES}개 미만이라 분포를 믿기 어렵습니다. "
+            "표본을 더 넣으세요."
+        )
+    sl = profile.sentence_length
+    print(f"\n문장 길이: 평균 {sl['mean']}자 · 표준편차 {sl['stdev']} · 변동계수 {sl['cv']}")
+    print("종결 유형: " + " · ".join(
+        f"{kind} {ratio:.0%}" for kind, ratio in list(profile.endings.items())[:6]
+    ))
+    if profile.markers:
+        print("문두 입버릇: " + ", ".join(
+            f"{marker} {rate}" for marker, rate in list(profile.markers.items())[:8]
+        ))
+
+
 def _print_presets() -> None:
     print(f"{'ID':<20} {'어투':<16} {'분량':<16} {'이모지':<14} 가드")
     for preset in presets.PRESETS.values():
@@ -92,7 +121,21 @@ def build_parser() -> argparse.ArgumentParser:
     scan_cmd = sub.add_parser("detect", help="흔적을 탐지한다")
     scan_cmd.add_argument("source", help="파일 경로 또는 '-' (표준입력)")
     scan_cmd.add_argument("--preset", default=presets.DEFAULT, choices=presets.ids())
+    scan_cmd.add_argument(
+        "--voice", default=None,
+        help="말투 프로필 JSON. 개인 기준선 이내의 흔적은 S3으로 낮춘다",
+    )
     scan_cmd.add_argument("--json", action="store_true")
+
+    profile_cmd = sub.add_parser("profile", help="표본에서 말투 프로필을 뜬다")
+    profile_cmd.add_argument("sources", nargs="+", help="표본 파일 경로")
+    profile_cmd.add_argument("--name", required=True, help="프로필 이름 (파일 이름이 된다)")
+    profile_cmd.add_argument("--out", default="voice", help="산출 디렉터리 (기본 voice/)")
+    profile_cmd.add_argument(
+        "--with-vocabulary", action="store_true",
+        help="자주 쓰는 낱말 목록까지 남긴다. 표본에 실명·거래처가 있으면 켜지 마세요",
+    )
+    profile_cmd.add_argument("--json", action="store_true")
 
     metrics_cmd = sub.add_parser("metrics", help="글자수와 문장 리듬을 센다")
     metrics_cmd.add_argument("source")
@@ -113,12 +156,45 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "detect":
-        result = detect.scan(_read(args.source), preset=args.preset)
+        text = _read(args.source)
+        result = detect.scan(text, preset=args.preset)
+        softened = []
+        if args.voice:
+            profile = json.loads(Path(args.voice).read_text(encoding="utf-8"))
+            softened = voice.apply_baseline(result, profile, text)
         if args.json:
-            print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
+            data = result.as_dict()
+            if args.voice:
+                data["voice"] = {"profile": args.voice, "softened": softened}
+            print(json.dumps(data, ensure_ascii=False, indent=2))
         else:
             _print_detect(result, presets.get(args.preset))
+            if softened:
+                print(
+                    "\n개인 기준선 이내라 S3으로 낮춘 규칙: " + ", ".join(softened)
+                )
         return 1 if result.s1 else 0
+
+    if args.command == "profile":
+        texts = [_read(source) for source in args.sources]
+        profile = voice.fingerprint(
+            "\n\n".join(texts), args.name, keep_vocabulary=args.with_vocabulary
+        )
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        json_path = out_dir / f"{args.name}.json"
+        md_path = out_dir / f"{args.name}.md"
+        json_path.write_text(
+            json.dumps(profile.as_dict(), ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        md_path.write_text(voice.render(profile), encoding="utf-8")
+        if args.json:
+            print(json.dumps(profile.as_dict(), ensure_ascii=False, indent=2))
+        else:
+            _print_profile(profile, args.sources)
+            print(f"\n기록: {json_path} · {md_path}")
+        return 0 if profile.volume["sentences"] >= voice.MIN_SENTENCES else 1
 
     if args.command == "metrics":
         data = metrics.report(_read(args.source), target=args.target)
