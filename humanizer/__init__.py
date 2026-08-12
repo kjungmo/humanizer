@@ -7,4 +7,4 @@
 from . import detect, metrics, presets, voice  # noqa: F401
 
 __all__ = ["detect", "metrics", "presets", "voice"]
-__version__ = "3.1.0"
+__version__ = "3.2.0"
